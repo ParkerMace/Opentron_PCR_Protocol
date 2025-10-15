@@ -43,6 +43,8 @@ def run(protocol: protocol_api.ProtocolContext):
 
     master_mix_tuberack = protocol.load_labware('opentrons_24_tuberack_eppendorf_1.5ml_safelock_snapcap', '2')
     master_mix_tube = master_mix_tuberack.wells_by_name()['A1']
+    water = master_mix_tuberack.wells_by_name()['A2']
+    onetaq = master_mix_tuberack.wells_by_name()['A3']
 
     primer_rack = protocol.load_labware('opentrons_96_aluminumblock_generic_pcr_strip_200ul', '5')
 
@@ -93,7 +95,18 @@ def run(protocol: protocol_api.ProtocolContext):
     # ----------------------
     # Important functions
     # ----------------------
-    
+    def create_master_mix():
+        water_vol = 10.5 * total_reactions
+        onetaq_vol = 12.5 * total_reactions
+
+        max_vol = p300.max_volume
+        while volume > 0:
+            transfer_vol = min(volume, max_vol)
+            p300.aspirate(transfer_vol, source)
+            p300.dispense(transfer_vol, dest)
+            p300.blow_out(source)
+            volume -= transfer_vol
+
     def distribute_master_mix(dest_wells):
         """
         Use one tip to distribute master mix to multiple wells,
@@ -191,14 +204,15 @@ def run(protocol: protocol_api.ProtocolContext):
     for plate_chunk in reaction_iter:
         protocol.comment(f"=== Preparing plate {plate_number} of {plates_needed} (contains {len(plate_chunk)} reactions) ===")
 
-        # load/assume the plate is in the same slot (reuse plate slot). If you want multiple plates preloaded,
-        # you can instead load multiple plate labware objects at the top and index them here.
-        #pcr_plate = protocol.load_labware('nest_96_wellplate_100ul_pcr_full_skirt', '5')
+        protocol.pause("Ensure correct amount of tubes and reagents are placed in the modules.")
 
         # build the target well list for this plate (wells in order A1..H12)
         target_wells = [pcr_plate.wells()[i] for i in range(len(plate_chunk))]
 
+        #set lid and block temp to remove condensation and preheat.
         tc_mod.open_lid()
+        tc_mod.set_lid_temperature(105)
+        tc_mod.set_block_temperature(94)
 
         # 1) Add master mix to all target wells using your multi-dispense helper
         distribute_master_mix(target_wells)
@@ -236,5 +250,9 @@ def run(protocol: protocol_api.ProtocolContext):
             cycles=30,
             final_hold=4
             )
+        
+        # 6) Pause until samples can be safely removed.
+        protocol.pause("Remove tubes and top off reagents, then press Resume.")
 
+        # 7) Move on to next batch.
         plate_number += 1
