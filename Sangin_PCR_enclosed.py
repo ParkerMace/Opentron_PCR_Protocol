@@ -100,7 +100,7 @@ def run(protocol: protocol_api.ProtocolContext):
         onetaq_vol = 12.5 * total_reactions
 
         max_vol = p300.max_volume
-        while volume > 0:
+        while water_vol > 0:
             transfer_vol = min(volume, max_vol)
             p300.aspirate(transfer_vol, source)
             p300.dispense(transfer_vol, dest)
