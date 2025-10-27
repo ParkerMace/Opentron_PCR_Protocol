@@ -100,12 +100,23 @@ def run(protocol: protocol_api.ProtocolContext):
         onetaq_vol = 12.5 * total_reactions
 
         max_vol = p300.max_volume
+        p300.pick_up_tip()
         while water_vol > 0:
-            transfer_vol = min(volume, max_vol)
-            p300.aspirate(transfer_vol, source)
-            p300.dispense(transfer_vol, dest)
-            p300.blow_out(source)
-            volume -= transfer_vol
+            transfer_vol = min(onetaq_vol, max_vol)
+            p300.aspirate(transfer_vol, water)
+            p300.dispense(transfer_vol, master_mix_tube)
+            p300.blow_out(water)
+            water_vol -= transfer_vol
+        p300.drop_tip()
+
+        p300.pick_up_tip()
+        while onetaq_vol > 0:
+            transfer_vol = min(onetaq_vol, max_vol)
+            p300.aspirate(transfer_vol, onetaq)
+            p300.dispense(transfer_vol, master_mix_tube)
+            p300.blow_out(onetaq)
+            onetaq_vol -= transfer_vol
+        p300.drop_tip()
 
     def distribute_master_mix(dest_wells):
         """
