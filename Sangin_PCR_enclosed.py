@@ -32,8 +32,8 @@ def run(protocol: protocol_api.ProtocolContext):
     # ----------------------
 
     # Load the Heater-Shaker with your PCR plate
-    tc_mod = protocol.load_module(module_name="thermocyclerModuleV1")
-    pcr_plate = tc_mod.load_labware(name='opentrons_96_aluminumblock_generic_pcr_strip_200ul')
+    tc_mod = protocol.load_module(module_name="thermocycler")
+    pcr_plate = tc_mod.load_labware(name='opentrons_96_wellplate_200ul_pcr_full_skirt')
 
     p300_tiprack = protocol.load_labware('opentrons_96_tiprack_300ul', '6')
     p300 = protocol.load_instrument('p300_single_gen2', 'left', tip_racks=[p300_tiprack])
@@ -82,7 +82,7 @@ def run(protocol: protocol_api.ProtocolContext):
 
     reaction_assignments = {}
     for dest, (sample, gene, replicate) in zip(pcr_plate.wells(), reaction_list):
-        primer_well = primer_map[gene]   # or however your primers are stored
+        primer_well = primer_map[gene]
         reaction_assignments[dest] = (sample, gene, replicate, primer_well)
 
     total_reactions = len(reaction_list)
@@ -220,8 +220,7 @@ def run(protocol: protocol_api.ProtocolContext):
         # 2) Add primer mixes for this plate
         for dest, (sample, gene, replicate, primer_well) in reaction_assignments.items():
             if dest in target_wells:
-                p20.transfer(vol_primer, primer_well, dest, new_tip='never')
-        p20.drop_tip()
+                p20.transfer(vol_primer, primer_well, dest, new_tip='always')
 
         # 3) Add DNA for this plate
         for dest, (sample, gene, replicate, primer_well) in reaction_assignments.items():
