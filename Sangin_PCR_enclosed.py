@@ -7,9 +7,9 @@ from itertools import islice
 #----------------------------------------
 
 metadata = {
-    "protocol_name" : "April_Auxin_PCR",
+    "protocol_name" : "Yeast_PCR",
     "author" : "Parker_Mace",
-    'description': 'Automated PCR setup with master mix, primers, and DNA samples'
+    'description': 'Automated PCR'
 }
 
 requirements = {
@@ -23,9 +23,15 @@ def run(protocol: protocol_api.ProtocolContext):
     # USER PARAMETERS (edit volumes as needed)
     # ----------------------
     replicates = 1
-    vol_master_mix = 23.0 # uL per well
-    vol_primer = 1 # uL per primer (6 primers => 3 uL total primers)
-    vol_dna = 1 # uL per dna sample
+    water_per_rxn = 21  # µL
+    onetaq_per_rxn = 25  # µL
+    overage = 1.1
+    vol_master_mix = water_per_rxn + onetaq_per_rxn # uL per well
+    vol_primer = 2 # uL per primer 
+    vol_dna = 2 # uL per dna sample
+    vol_reaction = vol_primer + vol_dna + vol_master_mix
+
+    
 
     # ----------------------
     # LABWARE (adjust labware and deck positions to your physical setup)
@@ -96,56 +102,76 @@ def run(protocol: protocol_api.ProtocolContext):
     # Important functions
     # ----------------------
     def create_master_mix():
-        water_vol = 10.5 * total_reactions
-        onetaq_vol = 12.5 * total_reactions
+        """Create master mix with overage for total reactions."""
+        water_vol = water_per_rxn * total_reactions * overage
+        onetaq_vol = onetaq_per_rxn * total_reactions * overage
+
+        protocol.comment(f"Creating master mix: {water_vol:.1f} µL water + {onetaq_vol:.1f} µL OneTaq")
 
         max_vol = p300.max_volume
+        
+        # Transfer water
         p300.pick_up_tip()
-        while water_vol > 0:
-            transfer_vol = min(onetaq_vol, max_vol)
+        remaining = water_vol
+        while remaining > 0:
+            transfer_vol = min(remaining, max_vol)
             p300.aspirate(transfer_vol, water)
             p300.dispense(transfer_vol, master_mix_tube)
-            p300.blow_out(water)
-            water_vol -= transfer_vol
+            p300.blow_out(master_mix_tube.top())
+            remaining -= transfer_vol
         p300.drop_tip()
 
+        # Transfer OneTaq
         p300.pick_up_tip()
-        while onetaq_vol > 0:
-            transfer_vol = min(onetaq_vol, max_vol)
+        remaining = onetaq_vol
+        while remaining > 0:
+            transfer_vol = min(remaining, max_vol)
             p300.aspirate(transfer_vol, onetaq)
             p300.dispense(transfer_vol, master_mix_tube)
-            p300.blow_out(onetaq)
-            onetaq_vol -= transfer_vol
+            p300.blow_out(master_mix_tube.top())
+            remaining -= transfer_vol
+        
+        # Mix master mix
+        p300.mix(5, 200, master_mix_tube)
+        p300.blow_out(master_mix_tube.top())
         p300.drop_tip()
+
+        protocol.comment("Master mix prepared and mixed.")
 
     def distribute_master_mix(dest_wells):
-        """
-        Use one tip to distribute master mix to multiple wells,
-        refilling from source tube as needed.
-        """
-        max_vol = p300.max_volume  # typically 300 uL
-        per_well = vol_master_mix
-        wells_remaining = list(dest_wells)
+        """Distribute master mix to wells, one at a time."""
+        for well in dest_wells:
+            p300.pick_up_tip()
+            p300.aspirate(vol_master_mix, master_mix_tube.bottom(2))
+            p300.dispense(vol_master_mix, well.bottom(2))
+            p300.blow_out(well.top())
+            p300.drop_tip()
 
-        p300.pick_up_tip()
-        while wells_remaining:
-            # How many wells can we serve in one aspiration?
-            num_wells_this_round = int(max_vol // per_well)
-            wells_chunk = wells_remaining[:num_wells_this_round]
-            wells_remaining = wells_remaining[num_wells_this_round:]
 
-            # Total volume to aspirate
-            total_asp = per_well * len(wells_chunk)
-            p300.aspirate(total_asp, master_mix_tube)
+    def add_primers(dest_wells, reaction_assignments):
+        """Add primers to destination wells."""
+        for dest in dest_wells:
+            sample, gene, replicate, primer_well = reaction_assignments[dest]
+            p20.pick_up_tip()
+            p20.aspirate(vol_primer, primer_well, rate=0.5)
+            p20.dispense(vol_primer, dest, rate=0.5)
+            p20.mix(3, 10, dest)
+            p20.blow_out(dest.top())
+            p20.touch_tip()
+        p20.drop_tip()
 
-            # Dispense per well
-            for w in wells_chunk:
-                p300.dispense(per_well, w)
-
-            # Small blowout back into source to clear tip
-            p300.blow_out(master_mix_tube)
-
-        p300.drop_tip()
+    def add_dna(dest_wells, reaction_assignments, dna_sources):
+        """Add DNA samples to destination wells."""
+        for dest in dest_wells:
+            sample, gene, replicate, primer_well = reaction_assignments[dest]
+            dna_source = dna_sources[sample]
+            p20.pick_up_tip()
+            p20.aspirate(vol_dna, dna_source, rate=0.5)
+            p20.dispense(vol_dna, dest, rate=0.5)
+            p20.mix(5, 15, dest)
+            p20.blow_out(dest.top())
+            p20.touch_tip()
+            p20.drop_tip()
 
     def run_pcr(
             denature_temp: float,
@@ -173,6 +199,7 @@ def run(protocol: protocol_api.ProtocolContext):
             protocol.comment(f"Starting PCR program: {cycles} cycles")
 
             tc_mod.close_lid()
+            tc_mod.set_lid_temperature(temperature = 105)
 
             for cycle in range(1, cycles + 1):
                 protocol.comment(f"Cycle {cycle} / {cycles}")
@@ -180,24 +207,30 @@ def run(protocol: protocol_api.ProtocolContext):
                 # Denaturation
                 tc_mod.set_block_temperature(
                 temperature=denature_temp,
-                hold_time_seconds=denature_time)
+                hold_time_seconds=denature_time,
+                block_max_volume=vol_reaction)
 
                 # Annealing
                 tc_mod.set_block_temperature(
                 temperature=anneal_temp,
-                hold_time_seconds=anneal_time)
+                hold_time_seconds=anneal_time,
+                block_max_volume=vol_reaction)
 
                 # Extension
                 tc_mod.set_block_temperature(
                 temperature=extend_temp,
-                hold_time_seconds=extend_time)
+                hold_time_seconds=extend_time,
+                block_max_volume=vol_reaction)
 
             # Final Elongation
             tc_mod.set_block_temperature(
                 temperature=elongation_step_temp,
-                hold_time_seconds=elongation_step_time)
+                hold_time_seconds=elongation_step_time,
+                block_max_volume=vol_reaction)
             # Final hold
-            tc_mod.set_block_temperature(final_hold)
+            tc_mod.deactivate_lid()
+            tc_mod.set_block_temperature(temperature=final_hold, block_max_volume=vol_reaction)
+            protocol.set_rail_lights(True)
             protocol.comment(f"PCR complete. Holding at {final_hold} °C.")
     
     # helper to chunk the reactions for each plate
@@ -209,6 +242,11 @@ def run(protocol: protocol_api.ProtocolContext):
                 break
             yield chunk
 
+    protocol.pause("Ensure reagents are loaded: water in A2, OneTaq in A3, empty 1.5mL tube in A1.")
+    
+    # Create master mix once for all reactions
+    create_master_mix()
+
     # For each plate, ask user to place an empty PCR plate in the configured plate slot (same slot reused)
     plate_number = 1
     reaction_iter = chunked_iterable(reaction_list, 96)
@@ -217,37 +255,26 @@ def run(protocol: protocol_api.ProtocolContext):
 
         protocol.pause("Ensure correct amount of tubes and reagents are placed in the modules.")
 
-        # build the target well list for this plate (wells in order A1..H12)
+        # build the target well list for this plate (wells in order A1,A2...H12)
         target_wells = [pcr_plate.wells()[i] for i in range(len(plate_chunk))]
 
-        #set lid and block temp to remove condensation and preheat.
+        # Open thermocycler
         tc_mod.open_lid()
-        tc_mod.set_lid_temperature(105)
-        tc_mod.set_block_temperature(94)
 
-        # 1) Add master mix to all target wells using your multi-dispense helper
+        # 1) Distribute master mix
+        protocol.comment("Adding master mix...")
         distribute_master_mix(target_wells)
 
-        # 2) Add primer mixes for this plate
-        for dest, (sample, gene, replicate, primer_well) in reaction_assignments.items():
-            if dest in target_wells:
-                p20.transfer(vol_primer, primer_well, dest, new_tip='always')
+        # 2) Add primers
+        protocol.comment("Adding primers...")
+        add_primers(target_wells, reaction_assignments)
 
-        # 3) Add DNA for this plate
-        for dest, (sample, gene, replicate, primer_well) in reaction_assignments.items():
-            if dest in target_wells:
-                dna_source = dna_sources[sample]
-                p20.transfer(vol_dna, dna_source, dest, new_tip='always')
+        # 3) Add DNA
+        protocol.comment("Adding DNA samples...")
+        add_dna(target_wells, reaction_assignments, dna_sources)
 
-        # 4) print a human-readable mapping for this plate (include primer mix well for clarity)
-        protocol.comment(f"Plate {plate_number} mapping (first column = well on plate, sample, gene, replicate):")
-        for well_idx, (sample, gene, rep_idx) in enumerate(plate_chunk):
-            dest = target_wells[well_idx]
-            primer_well = primer_map.get(gene)
-            primer_loc = primer_well.display_name if primer_well is not None else "UNKNOWN"
-            protocol.comment(f"{dest.display_name}: {sample} | {gene} | replicate {rep_idx+1} | primer mix: {primer_loc}")
-
-        # 5) Run PCR
+        # 4) Run PCR
+        protocol.pause("Cap PCR tubes.")
         run_pcr(
             denature_temp=94,
             denature_time=90,
@@ -261,8 +288,9 @@ def run(protocol: protocol_api.ProtocolContext):
             final_hold=4
             )
         
-        # 6) Pause until samples can be safely removed.
-        protocol.pause("Remove tubes and top off reagents, then press Resume.")
+        # 5) Completion
+        tc_mod.open_lid()
+        protocol.pause(f"Plate {plate_number} complete. Remove samples and press Resume for next plate.")
 
-        # 7) Move on to next batch.
+        # 6) Move on to next batch.
         plate_number += 1
