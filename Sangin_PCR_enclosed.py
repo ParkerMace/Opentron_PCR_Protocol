@@ -140,12 +140,12 @@ def run(protocol: protocol_api.ProtocolContext):
 
     def distribute_master_mix(dest_wells):
         """Distribute master mix to wells, one at a time."""
+        p300.pick_up_tip()
         for well in dest_wells:
-            p300.pick_up_tip()
             p300.aspirate(vol_master_mix, master_mix_tube.bottom(2))
             p300.dispense(vol_master_mix, well.bottom(2))
             p300.blow_out(well.top())
-            p300.drop_tip()
+        p300.drop_tip()
 
 
     def add_primers(dest_wells, reaction_assignments):
@@ -158,7 +158,7 @@ def run(protocol: protocol_api.ProtocolContext):
             p20.mix(3, 10, dest)
             p20.blow_out(dest.top())
             p20.touch_tip()
-        p20.drop_tip()
+            p20.drop_tip()
 
     def add_dna(dest_wells, reaction_assignments, dna_sources):
         """Add DNA samples to destination wells."""
