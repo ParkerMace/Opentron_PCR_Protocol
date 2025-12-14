@@ -14,7 +14,7 @@ metadata = {
 
 requirements = {
     "robotType" : "OT-2",
-    "apiLevel" : "2.16"
+    "apiLevel" : "2.27"
 }
 
 def run(protocol: protocol_api.ProtocolContext):
@@ -51,7 +51,7 @@ def run(protocol: protocol_api.ProtocolContext):
     master_mix_tube = master_mix_tuberack.wells_by_name()['A1']
     water = master_mix_tuberack.wells_by_name()['A2']
     onetaq = master_mix_tuberack.wells_by_name()['A3']
-
+ 
     primer_rack = protocol.load_labware('opentrons_96_aluminumblock_generic_pcr_strip_200ul', '5')
 
     dna_plate = protocol.load_labware('opentrons_96_aluminumblock_generic_pcr_strip_200ul', '4')
@@ -71,7 +71,7 @@ def run(protocol: protocol_api.ProtocolContext):
     '''Other important dictionaries and lists.'''
     dna_sources = {}
     for i, sample in enumerate(sample_genes.keys()):
-        dna_sources[sample] = dna_plate.wells()[i]
+        dna_sources[sample] = dna_plate.rows()[i]
 
     protocol.comment("DNA sample sources mapped:")
     for s, w in dna_sources.items():
@@ -87,7 +87,7 @@ def run(protocol: protocol_api.ProtocolContext):
                 reaction_list.append((sample, gene, r))
 
     reaction_assignments = {}
-    for dest, (sample, gene, replicate) in zip(pcr_plate.wells(), reaction_list):
+    for dest, (sample, gene, replicate) in zip(pcr_plate.rows(), reaction_list):
         primer_well = primer_map[gene]
         reaction_assignments[dest] = (sample, gene, replicate, primer_well)
 
@@ -122,16 +122,18 @@ def run(protocol: protocol_api.ProtocolContext):
         p300.drop_tip()
 
         # Transfer OneTaq
-        p300.pick_up_tip()
         remaining = onetaq_vol
         while remaining > 0:
+            p300.pick_up_tip()
             transfer_vol = min(remaining, max_vol)
             p300.aspirate(transfer_vol, onetaq)
             p300.dispense(transfer_vol, master_mix_tube)
             p300.blow_out(master_mix_tube.top())
+            p300.drop_tip()
             remaining -= transfer_vol
         
         # Mix master mix
+        p300.pick_up_tip()
         p300.mix(5, 200, master_mix_tube)
         p300.blow_out(master_mix_tube.top())
         p300.drop_tip()
@@ -255,8 +257,8 @@ def run(protocol: protocol_api.ProtocolContext):
 
         protocol.pause("Ensure correct amount of tubes and reagents are placed in the modules.")
 
-        # build the target well list for this plate (wells in order A1,A2...H12)
-        target_wells = [pcr_plate.wells()[i] for i in range(len(plate_chunk))]
+        # build the target well list for this plate (wells in order A1...H12)
+        target_wells = [pcr_plate.rows()[i] for i in range(len(plate_chunk))]
 
         # Open thermocycler
         tc_mod.open_lid()
