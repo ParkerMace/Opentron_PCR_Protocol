@@ -63,15 +63,17 @@ def run(protocol: protocol_api.ProtocolContext):
     
     # Copy/Paste dictionaries from generated text file
     primer_map = {"ARO8": primer_rack.wells_by_name()["A1"],
-    "NIT1": primer_rack.wells_by_name()["B1"],
-    "AMD": primer_rack.wells_by_name()["C1"],}
-    sample_genes = {"M29": ["ARO8", "NIT1","AMD"],}
+    "NIT1": primer_rack.wells_by_name()["A2"],
+    "AMD": primer_rack.wells_by_name()["A3"],}
+    sample_genes = {"Sample1": ["ARO8", "NIT1","AMD"],
+                    "Sample2": ["NIT1"],
+                    "Sample3": ["ARO8"],}
     
 
     '''Other important dictionaries and lists.'''
     dna_sources = {}
     for i, sample in enumerate(sample_genes.keys()):
-        dna_sources[sample] = dna_plate.rows()[i]
+        dna_sources[sample] = dna_plate.wells()[i]
 
     protocol.comment("DNA sample sources mapped:")
     for s, w in dna_sources.items():
@@ -87,7 +89,7 @@ def run(protocol: protocol_api.ProtocolContext):
                 reaction_list.append((sample, gene, r))
 
     reaction_assignments = {}
-    for dest, (sample, gene, replicate) in zip(pcr_plate.rows(), reaction_list):
+    for dest, (sample, gene, replicate) in zip(pcr_plate.wells(), reaction_list):
         primer_well = primer_map[gene]
         reaction_assignments[dest] = (sample, gene, replicate, primer_well)
 
@@ -148,7 +150,6 @@ def run(protocol: protocol_api.ProtocolContext):
             p300.dispense(vol_master_mix, well.bottom(2))
             p300.blow_out(well.top())
         p300.drop_tip()
-
 
     def add_primers(dest_wells, reaction_assignments):
         """Add primers to destination wells."""
@@ -258,7 +259,7 @@ def run(protocol: protocol_api.ProtocolContext):
         protocol.pause("Ensure correct amount of tubes and reagents are placed in the modules.")
 
         # build the target well list for this plate (wells in order A1...H12)
-        target_wells = [pcr_plate.rows()[i] for i in range(len(plate_chunk))]
+        target_wells = [pcr_plate.wells()[i] for i in range(len(plate_chunk))]
 
         # Open thermocycler
         tc_mod.open_lid()
