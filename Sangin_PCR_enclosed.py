@@ -34,7 +34,7 @@ def run(protocol: protocol_api.ProtocolContext):
     
 
     # ----------------------
-    # LABWARE (adjust labware and deck positions to your physical setup)
+    # LABWARE
     # ----------------------
 
     # Load the Heater-Shaker with your PCR plate
