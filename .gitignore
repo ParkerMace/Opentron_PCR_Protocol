@@ -1,0 +1,10 @@
+# Python virtual environment
+ot2/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS junk
+.DS_Store
+Thumbs.db
