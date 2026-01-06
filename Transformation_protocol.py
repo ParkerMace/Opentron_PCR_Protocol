@@ -32,12 +32,12 @@ def run(protocol: protocol_api.ProtocolContext):
     hs_adapter = hs_mod.load_adapter("opentrons_96_flat_bottom_adapter")
     recover = hs_adapter.load_labware("nest_96_wellplate_200ul_flat")
 
-    temp_mod = protocol.load_module(module_name="temperature module gen2", location="7")
+    temp_mod = protocol.load_module(module_name="temperature module gen2", location="1")
     temp_adapter = temp_mod.load_adapter("opentrons_96_well_aluminum_block")
     transform = temp_adapter.load_labware("nest_96_wellplate_100ul_pcr_full_skirt")
 
     #Resevoir and Assemblies
-    resevoir = protocol.load_labware('opentrons_tough_4_reservoir_72ml', '1')
+    resevoir = protocol.load_labware('opentrons_tough_4_reservoir_72ml', '11')
     assemblies = protocol.load_labware('opentrons_tough_4_reservoir_72ml', '4')
 
     #Pipette and tips
@@ -61,18 +61,16 @@ def run(protocol: protocol_api.ProtocolContext):
     #--------  
 
     samples = 32
-    sample_col = int(samples / 8)
-    assembly_wells = assemblies.wells()[0,sample_col,8]
+    sample_col = samples // 8
+    assembly_wells = assemblies.wells()[0:sample_col:8]
     recovery_wells = assembly_wells
     trans_wells = recovery_wells
     dilution_wells = {}
     for sample in range(0,sample_col):
         wells = []
-        for col in dil_plate.columns()[sample,sample+1]:
-            wells.append(col[0,1])
+        for col in dil_plate.columns()[sample:sample+1]:
+            wells.append(col[0:1])
         dilution_wells[sample] = wells
-    dil_scheme = []
-
 
     def distribute_media(dilution_vol, recovery_vol):
         """Distribute media to dilution and recovery wells."""
@@ -150,7 +148,9 @@ def run(protocol: protocol_api.ProtocolContext):
         # transformation profile
         protocol.wait_for_tasks([on_ice])
         transformation(9)
-        temp_mod.set_temperature(celsius=4)
+        temp_mod.set_temperature(celsius=40)
+        protocol.delay(seconds = 30)
+        temp_mod.deactivate()
 
         recovery(30)
         # set Heater-Shaker temperature and shake speed
@@ -161,7 +161,7 @@ def run(protocol: protocol_api.ProtocolContext):
         protocol.wait_for_tasks([heat_task])
 
         # create timer for sample incubation
-        hs_timer = create_timer(seconds=300)
+        protocol.delay(minutes = 60)
 
         # hold samples at target temperature
         protocol.wait_for_tasks([hs_timer])
