@@ -50,7 +50,6 @@ def run(protocol: protocol_api.ProtocolContext):
     #Dilution Plate
     dil_plate = protocol.load_labware('appliedbiosystemsmicroamp_384_wellplate_40ul', '8')
     
-
     #Agar Plates
     agar_plate_1 = protocol.load_labware('axygen_96_wellplate_500ul', '3')
     agar_plate_2 = protocol.load_labware('axygen_96_wellplate_500ul', '6')
@@ -65,13 +64,18 @@ def run(protocol: protocol_api.ProtocolContext):
     assembly_wells = assemblies.wells()[0:sample_col:8]
     recovery_wells = assembly_wells
     trans_wells = recovery_wells
-    dilution_wells = {}
-    for sample in range(0,sample_col):
-        wells = []
-        for col in dil_plate.columns()[sample:sample+1]:
-            wells.append(col[0:1])
-        dilution_wells[sample] = wells
 
+    dilution_wells = {}
+    for i in range(sample_col):  # sample_col = number of 8-channel samples
+        col_start = 2 * i
+
+        dilution_wells[i] = (
+            dil_plate.rows()[0][col_start],     # A?
+            dil_plate.rows()[0][col_start + 1], # A?
+            dil_plate.rows()[1][col_start],     # B?
+            dil_plate.rows()[1][col_start + 1], # B?
+        )
+        
     def distribute_media(dilution_vol, recovery_vol):
         """Distribute media to dilution and recovery wells."""
         p300_multi.pick_up_tip()
@@ -117,8 +121,8 @@ def run(protocol: protocol_api.ProtocolContext):
                 index = trans_wells.index(well)
                 '''
                 Dilution order:
-                [0|3]
-                [1|4]
+                [1|3]
+                [2|4]
                 '''
                 p20_multi.pick_up_tip(p20_tiprack)
                 p20_multi.aspirate(location = recover.well(well), volume = dil1)
@@ -134,7 +138,25 @@ def run(protocol: protocol_api.ProtocolContext):
                 p20_multi.dispense(location = dil_plate.well(dilution_wells[index][3]))
                 p20_multi.mix(repetitions = 5)
                 p20_multi.return_tip()
-                
+
+    def plating():
+        '''
+        Plating of dilutions on 96-well agar plates.
+        '''
+
+        while i < 8:
+            for i in range(sample_col):
+                p20_multi.pick_up_tip(p20_tiprack)
+                p20_multi.aspirate(location = dil_plate.well(dilution_wells[i][0], volume = 3))
+                p20_multi.dispense(location = agar_plate_1.well()[i])
+                p20_multi.aspirate(location = dil_plate.well(dilution_wells[i][1], volume = 3))
+                p20_multi.dispense(location = agar_plate_1.well()[i + 1])
+                p20_multi.aspirate(location = dil_plate.well(dilution_wells[i][2], volume = 3))
+                p20_multi.dispense(location = agar_plate_1.well()[i + 2])
+                p20_multi.aspirate(location = dil_plate.well(dilution_wells[i][3], volume = 3))
+                p20_multi.dispense(location = agar_plate_1.well()[i + 3])
+                p20_multi.return_tip()
+
     def main():
 
         #On ice
@@ -143,6 +165,7 @@ def run(protocol: protocol_api.ProtocolContext):
         #preheat heater/shaker
         hs_mod.start_set_temperature(celsius=37)
 
+        #Distribute media into recovery and dilution wells
         distribute_media(60, 90)
 
         # transformation profile
@@ -154,19 +177,20 @@ def run(protocol: protocol_api.ProtocolContext):
 
         recovery(30)
         # set Heater-Shaker temperature and shake speed
-        heat_task = hs_mod.start_set_temperature(75)
-        hs_mod.set_shake_speed(300)
-
-        # wait for module to finish heating
-        protocol.wait_for_tasks([heat_task])
+        hs_mod.start_set_temperature(75)
+        hs_mod.close_labware_latch()
+        hs_mod.set_and_wait_for_shake_speed(300)
 
         # create timer for sample incubation
         protocol.delay(minutes = 60)
 
         # hold samples at target temperature
-        protocol.wait_for_tasks([hs_timer])
         hs_mod.deactivate_heater()
+        hs_mod.deactivate_shaker()
 
         dilutions()
+
+    #run protocol
+    main()
 
         
