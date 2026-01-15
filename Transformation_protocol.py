@@ -152,7 +152,7 @@ def run(protocol: protocol_api.ProtocolContext):
             [1|3]
             [2|4]
             '''
-            p20_multi.pick_up_tip()
+            p20_multi.pick_up_tip(location = p20_tiprack()[i])
             p20_multi.aspirate(location = sample, volume = dil1)
             p20_multi.dispense(location = dilution_wells[i][0])
             p20_multi.mix(repetitions = 5, volume=3)
@@ -174,23 +174,22 @@ def run(protocol: protocol_api.ProtocolContext):
         p20_multi.well_bottom_clearance.dispense = agar_height + 0.3
 
         for i in range(sample_col):
-                p20_multi.pick_up_tip()
-                p20_multi.aspirate(location = dilution_wells[i][1], volume = 3)
+                p20_multi.pick_up_tip(location = p20_tiprack()[i])
+                p20_multi.aspirate(location = dilution_wells[i][3], volume = 3)
                 p20_multi.dispense(location = agar_plate_1.wells()[i])
                 p20_multi.aspirate(location = dilution_wells[i][2], volume = 3)
                 p20_multi.dispense(location = agar_plate_2.wells()[i])
-                p20_multi.aspirate(location = dilution_wells[i][3], volume = 3)
+                p20_multi.aspirate(location = dilution_wells[i][1], volume = 3)
                 p20_multi.dispense(location = agar_plate_3.wells()[i])
                 p20_multi.return_tip()
 
     def main():
         hs_mod.close_labware_latch()
+        #on ice
+        temp_mod.start_set_temperature(celsius=4)
 
         #create agar plates
         create_plates(30)
-
-        #on ice
-        on_ice = temp_mod.start_set_temperature(celsius=4)
 
         #preheat heater/shaker
         hs_mod.set_target_temperature(celsius=37)
@@ -199,7 +198,6 @@ def run(protocol: protocol_api.ProtocolContext):
         distribute_media(60, 90)
 
         # transformation profile
-        protocol.wait_for_tasks([on_ice])
         transformation(9)
         temp_mod.set_temperature(celsius=40)
         protocol.delay(seconds = 30)
